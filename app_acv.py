@@ -3,36 +3,16 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 
-# Configuração da página para web pública
-st.set_page_config(
-    page_title="Plataforma ACV Matricial",
-    page_icon="🌱",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Plataforma ACV Matricial", page_icon="🌱", layout="wide")
 
-# Barra lateral com guia rápido para usuários externos
 with st.sidebar:
     st.title("🌱 Guia Rápido - ACV")
-    st.markdown("""
-    Esta ferramenta automatiza o cálculo de **Avaliação do Ciclo de Vida (ACV)** pelo método matricial:
-    
-    $$q_u = R_u \cdot T^{-1} \cdot y_u$$
-    
-    **Passo a passo:**
-    1. **FT1:** Defina os processos e a demanda final.
-    2. **FT2:** Preencha entradas (-) e saídas (+) na Matriz $T$.
-    3. **FT3:** Insira emissões e resíduos na Matriz $R_u$.
-    4. **FT4:** Analise os resultados, escolha a escala do gráfico e baixe o relatório.
-    """)
-    st.divider()
+    st.markdown("Cálculo matricial: $q_u = R_u \cdot T^{-1} \cdot y_u$")
     if st.button("🔄 Restaurar Exemplo Padrão"):
         st.session_state.clear()
         st.rerun()
 
 st.title("🌱 Ferramenta Online de Avaliação do Ciclo de Vida (ACV)")
-st.markdown("Preencha as etapas nos fluxos abaixo para quantificar o inventário ambiental do seu sistema de produto.")
-
 tab1, tab2, tab3, tab4 = st.tabs([
     "1️⃣ FT1: Escopo e Fronteira",
     "2️⃣ FT2: Matriz Tecnológica (T)",
@@ -40,126 +20,71 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "4️⃣ FT4: Cálculo e Interpretação"
 ])
 
-# ==========================================
-# FLUXO DE TRABALHO 1 (FT1)
-# ==========================================
+# FT1
 with tab1:
-    st.header("Definição do Sistema, Fronteira e Demanda ($y_u$)")
-    
     col1, col2 = st.columns(2)
-    with col1:
-        funcao = st.text_input("Função do Sistema:", value="Colorir paredes internas de uma residência")
-    with col2:
-        uf = st.text_input("Unidade Funcional (UF):", value="10 kg de tinta aplicada")
+    funcao = col1.text_input("Função do Sistema:", value="Colorir paredes internas de uma residência")
+    uf = col2.text_input("Unidade Funcional (UF):", value="10 kg de tinta aplicada")
 
-    st.subheader("Processos da Cadeia Produtiva e Demanda Final")
-    st.info("Marque 'Na Fronteira?' para incluir o processo no cálculo. Use o botão '+' na base da tabela para adicionar novos processos.")
-
-    df_ft1_inicial = pd.DataFrame({
+    df_ft1_ini = pd.DataFrame({
         "Processo": ["Extração de Petróleo", "Produção de Resina", "Fabricação da Tinta"],
         "Na Fronteira?": [False, True, True],
         "Demanda Final (y_u)": [0.0, 0.0, 10.0]
     })
+    df_ft1 = st.data_editor(df_ft1_ini, num_rows="dynamic", use_container_width=True, key="ft1")
 
-    df_ft1 = st.data_editor(
-        df_ft1_inicial,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="editor_ft1"
-    )
+    df_front = df_ft1[df_ft1["Na Fronteira?"] == True].copy()
+    proc_ativos = df_front["Processo"].dropna().tolist()
+    y_u_vec = df_front["Demanda Final (y_u)"].fillna(0.0).tolist()
 
-    df_fronteira = df_ft1[df_ft1["Na Fronteira?"] == True].copy()
-    processos_ativos = df_fronteira["Processo"].dropna().tolist()
-    y_u_vetor = df_fronteira["Demanda Final (y_u)"].fillna(0.0).tolist()
-
-    st.subheader("Fluxograma Automático do Sistema")
     if len(df_ft1) > 0:
-        dot_code = 'digraph G {\n  rankdir=LR;\n  node [shape=box, style="rounded,filled", fontname="Arial"];\n'
-        for _, row in df_ft1.iterrows():
-            nome = str(row["Processo"]).replace('"', '')
+        dot = 'digraph G { rankdir=LR; node [shape=box, style="rounded,filled"];\n'
+        for _, r in df_ft1.iterrows():
+            nome = str(r["Processo"]).replace('"', '')
             if nome and nome != "None":
-                if row["Na Fronteira?"]:
-                    dot_code += f'  "{nome}" [fillcolor="#d4edda", color="#28a745", label="{nome}\\n(Demanda: {row["Demanda Final (y_u)"]})"];\n'
-                else:
-                    dot_code += f'  "{nome}" [fillcolor="#f8d7da", color="#dc3545", style="dashed,filled", label="{nome}\\n(Fora da Fronteira)"];\n'
-        
-        nomes_validos = [str(n).replace('"', '') for n in df_ft1["Processo"].dropna() if str(n).strip() != ""]
-        for i in range(len(nomes_validos) - 1):
-            dot_code += f'  "{nomes_validos[i]}" -> "{nomes_validos[i+1]}";\n'
-        dot_code += '}'
-        st.graphviz_chart(dot_code)
+                cor = 'fillcolor="#d4edda", color="#28a745"' if r["Na Fronteira?"] else 'fillcolor="#f8d7da", color="#dc3545", style="dashed,filled"'
+                dot += f' "{nome}" [{cor}, label="{nome}\\n(y_u: {r["Demanda Final (y_u)"]})"];\n'
+        validos = [str(n).replace('"', '') for n in df_ft1["Processo"].dropna() if str(n).strip() != ""]
+        for i in range(len(validos) - 1):
+            dot += f' "{validos[i]}" -> "{validos[i+1]}";\n'
+        st.graphviz_chart(dot + '}')
 
-# ==========================================
-# FLUXO DE TRABALHO 2 (FT2)
-# ==========================================
+# FT2
 with tab2:
-    st.header("Construção da Matriz Tecnológica ($T$)")
-    st.markdown("**Regra:** Use **valores negativos (-)** para insumos/entradas e **valores positivos (+)** para produtos/saídas.")
-
-    if len(processos_ativos) == 0:
-        st.warning("Selecione pelo menos um processo dentro da fronteira no FT1.")
+    st.markdown("**Regra:** Entradas/insumos são **negativos (-)** e saídas/produtos são **positivos (+)**.")
+    if not proc_ativos:
+        st.warning("Selecione processos na fronteira no FT1.")
     else:
-        n = len(processos_ativos)
-        matriz_t_padrao = np.eye(n)
-        
-        if n == 2 and processos_ativos == ["Produção de Resina", "Fabricação da Tinta"]:
-            matriz_t_padrao = np.array([[1.0, -0.4], [0.0, 1.0]])
-
-        df_t_inicial = pd.DataFrame(
-            matriz_t_padrao,
-            index=[f"Fluxo: {p}" for p in processos_ativos],
-            columns=processos_ativos
-        )
-
-        df_T = st.data_editor(df_t_inicial, use_container_width=True, key="editor_ft2")
-        T_matrix = df_T.fillna(0.0).to_numpy()
-
-        if T_matrix.shape[0] != T_matrix.shape[1]:
-            st.error("A Matriz T precisa ser quadrada.")
-        elif np.linalg.det(T_matrix) == 0:
-            st.error("⚠️ Alerta: O determinante da Matriz T é zero (matriz não inversível). Verifique os balanços de entrada e saída.")
+        n = len(proc_ativos)
+        mat_t = np.array([[1.0, -0.4], [0.0, 1.0]]) if (n == 2 and proc_ativos == ["Produção de Resina", "Fabricação da Tinta"]) else np.eye(n)
+        df_T = st.data_editor(pd.DataFrame(mat_t, index=[f"Fluxo: {p}" for p in proc_ativos], columns=proc_ativos), use_container_width=True, key="ft2")
+        T_mat = df_T.fillna(0.0).to_numpy()
+        if T_mat.shape[0] != T_mat.shape[1] or np.linalg.det(T_mat) == 0:
+            st.error("⚠️ Matriz T inválida ou não inversível.")
         else:
-            st.success("✅ Matriz T válida e pronta para cálculo!")
+            st.success("✅ Matriz T válida!")
 
-# ==========================================
-# FLUXO DE TRABALHO 3 (FT3)
-# ==========================================
+# FT3
 with tab3:
-    st.header("Construção da Matriz de Intervenção Ambiental ($R_u$)")
-    st.markdown("Insira a quantidade de emissões ou resíduos gerados **por unidade de cada processo**.")
-
-    if len(processos_ativos) == 0:
+    if not proc_ativos:
         st.warning("Defina os processos no FT1 primeiro.")
     else:
-        n = len(processos_ativos)
-        dados_r = np.zeros((2, n))
-        if n == 2 and processos_ativos == ["Produção de Resina", "Fabricação da Tinta"]:
-            dados_r = np.array([[2.5, 1.2], [0.1, 0.05]])
+        n = len(proc_ativos)
+        mat_r = np.array([[2.5, 1.2], [0.1, 0.05]]) if (n == 2 and proc_ativos == ["Produção de Resina", "Fabricação da Tinta"]) else np.zeros((2, n))
+        df_r_ini = pd.DataFrame(mat_r, columns=proc_ativos)
+        df_r_ini.insert(0, "Intervenção Ambiental", ["Emissão CO2 (kg)", "Resíduo Sólido (kg)"])
+        df_R = st.data_editor(df_r_ini, num_rows="dynamic", use_container_width=True, key="ft3")
 
-        df_r_inicial = pd.DataFrame(dados_r, columns=processos_ativos)
-        df_r_inicial.insert(0, "Intervenção Ambiental (Unidade)", ["Emissão CO2 (kg)", "Resíduo Sólido (kg)"])
-
-        df_R = st.data_editor(
-            df_r_inicial,
-            num_rows="dynamic",
-            use_container_width=True,
-            key="editor_ft3"
-        )
-
-# ==========================================
-# FLUXO DE TRABALHO 4 (FT4)
-# ==========================================
+# FT4
 with tab4:
-    st.header("Quantificação do Inventário ($q_u$) e Interpretação")
-
-    if len(processos_ativos) == 0:
-        st.warning("Complete os fluxos anteriores para visualizar os resultados.")
+    if not proc_ativos:
+        st.warning("Complete os fluxos anteriores.")
     else:
         try:
-            y_vec = np.array(y_u_vetor, dtype=float).reshape(-1, 1)
+            y_vec = np.array(y_u_vec, dtype=float).reshape(-1, 1)
             T_mat = df_T.fillna(0.0).to_numpy(dtype=float)
-            nomes_intervencoes = df_R["Intervenção Ambiental (Unidade)"].fillna("Intervenção sem nome").tolist()
-            R_mat = df_R[processos_ativos].fillna(0.0).to_numpy(dtype=float)
+            nomes_int = df_R["Intervenção Ambiental"].fillna("Sem nome").tolist()
+            R_mat = df_R[proc_ativos].fillna(0.0).to_numpy(dtype=float)
 
             s_vec = np.dot(np.linalg.inv(T_mat), y_vec)
             q_u = np.dot(R_mat, s_vec)

@@ -114,7 +114,7 @@ with tab2:
         df_T = st.data_editor(df_t_inicial, use_container_width=True, key="editor_ft2")
         T_matrix = df_T.fillna(0.0).to_numpy()
 
-        if T_matrix.shape != T_matrix.shape:
+        if T_matrix.shape[0] != T_matrix.shape[1]:
             st.error("A Matriz T precisa ser quadrada.")
         elif np.linalg.det(T_matrix) == 0:
             st.error("⚠️ Alerta: O determinante da Matriz T é zero (matriz não inversível). Verifique os balanços de entrada e saída.")
@@ -168,7 +168,7 @@ with tab4:
             contribuicao_matrix = R_mat * vetor_escala.T
 
             st.subheader(f"Resultados para: {uf}")
-            col_res1, col_res2 = st.columns()
+            col_res1, col_res2 = st.columns(2)
 
             with col_res1:
                 st.markdown("**Fator de Escala dos Processos ($s = T^{-1} y_u$)**")

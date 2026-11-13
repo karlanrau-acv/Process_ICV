@@ -23,7 +23,7 @@ with st.sidebar:
     1. **FT1:** Defina os processos e a demanda final.
     2. **FT2:** Preencha entradas (-) e saídas (+) na Matriz $T$.
     3. **FT3:** Insira emissões e resíduos na Matriz $R_u$.
-    4. **FT4:** Analise os resultados e baixe o relatório.
+    4. **FT4:** Analise os resultados, escolha a escala do gráfico e baixe o relatório.
     """)
     st.divider()
     if st.button("🔄 Restaurar Exemplo Padrão"):
@@ -184,29 +184,53 @@ with tab4:
                 df_contrib = pd.DataFrame(contribuicao_matrix, index=nomes_intervencoes, columns=processos_ativos)
                 st.dataframe(df_contrib, use_container_width=True)
 
-                df_plot = df_contrib.reset_index().melt(id_vars="index", var_name="Processo", value_name="Quantidade")
+                st.divider()
+                # Seletor de escala/transformação para o gráfico
+                modo_grafico = st.selectbox(
+                    "📊 Escolha a escala de visualização do gráfico:",
+                    options=[
+                        "Valores Reais (Exatos)",
+                        "Valores Arredondados (Inteiros)",
+                        "Normalizado (0% a 100% por Intervenção)",
+                        "Escala Logarítmica (Base Log 10)"
+                    ]
+                )
+
+                # Prepara os dados de acordo com a escolha do usuário
+                df_dados_grafico = df_contrib.copy()
+
+                if modo_grafico == "Valores Arredondados (Inteiros)":
+                    df_dados_grafico = df_dados_grafico.round(0).astype(int)
+                    formato_texto = '%d'
+                    titulo_y = "Quantidade (Inteiros)"
+                    usar_log = False
+                    modo_barra = "stack"
+
+                elif modo_grafico == "Normalizado (0% a 100% por Intervenção)":
+                    somas_linha = df_dados_grafico.sum(axis=1).replace(0, np.nan)
+                    df_dados_grafico = df_dados_grafico.div(somas_linha, axis=0).fillna(0) * 100
+                    formato_texto = '.1f'
+                    titulo_y = "Contribuição Relativa (%)"
+                    usar_log = False
+                    modo_barra = "stack"
+
+                elif modo_grafico == "Escala Logarítmica (Base Log 10)":
+                    # Log10 exige barras agrupadas (group) e valores estritamente positivos
+                    formato_texto = '.2e'
+                    titulo_y = "Quantidade (Escala Log 10)"
+                    usar_log = True
+                    modo_barra = "group"
+
+                else: # Valores Reais (Exatos)
+                    formato_texto = '.2f'
+                    titulo_y = "Quantidade Real"
+                    usar_log = False
+                    modo_barra = "stack"
+
+                df_plot = df_dados_grafico.reset_index().melt(
+                    id_vars="index", 
+                    var_name="Processo", 
+                    value_name="Valor"
+                )
                 df_plot.rename(columns={"index": "Intervenção"}, inplace=True)
 
-                fig = px.bar(
-                    df_plot,
-                    x="Intervenção",
-                    y="Quantidade",
-                    color="Processo",
-                    title="Participação de Cada Processo nas Emissões e Resíduos",
-                    barmode="stack",
-                    text_auto='.2f'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-            csv = df_contrib.to_csv().encode('utf-8')
-            st.download_button(
-                label="📥 Baixar Relatório Detalhado (CSV)",
-                data=csv,
-                file_name="inventario_acv.csv",
-                mime="text/csv",
-            )
-
-        except np.linalg.LinAlgError:
-            st.error("Erro matemático: A Matriz T não pode ser invertida. Revise os valores no FT2.")
-        except Exception as e:
-            st.error(f"Verifique o preenchimento das tabelas. Detalhe: {e}")

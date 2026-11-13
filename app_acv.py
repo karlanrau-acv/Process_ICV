@@ -158,84 +158,55 @@ with tab4:
         try:
             y_vec = np.array(y_u_vetor, dtype=float).reshape(-1, 1)
             T_mat = df_T.fillna(0.0).to_numpy(dtype=float)
-            
             nomes_intervencoes = df_R["Intervenção Ambiental (Unidade)"].fillna("Intervenção sem nome").tolist()
             R_mat = df_R[processos_ativos].fillna(0.0).to_numpy(dtype=float)
 
-            T_inv = np.linalg.inv(T_mat)
-            vetor_escala = np.dot(T_inv, y_vec)
-            q_u = np.dot(R_mat, vetor_escala)
-            contribuicao_matrix = R_mat * vetor_escala.T
+            s_vec = np.dot(np.linalg.inv(T_mat), y_vec)
+            q_u = np.dot(R_mat, s_vec)
+            contrib = R_mat * s_vec.T
 
-            st.subheader(f"Resultados para: {uf}")
-            col_res1, col_res2 = st.columns(2)
-
-            with col_res1:
-                st.markdown("**Fator de Escala dos Processos ($s = T^{-1} y_u$)**")
-                df_escala = pd.DataFrame(vetor_escala, index=processos_ativos, columns=["Fator de Escala"])
-                st.dataframe(df_escala, use_container_width=True)
-
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Fator de Escala ($s = T^{-1} y_u$)**")
+                st.dataframe(pd.DataFrame(s_vec, index=proc_ativos, columns=["Escala"]), use_container_width=True)
                 st.markdown("**Inventário Total ($q_u$)**")
-                df_total = pd.DataFrame(q_u, index=nomes_intervencoes, columns=["Carga Total"])
-                st.dataframe(df_total, use_container_width=True)
+                st.dataframe(pd.DataFrame(q_u, index=nomes_int, columns=["Total"]), use_container_width=True)
 
-            with col_res2:
-                st.markdown("**Contribuição por Processo (Análise de Hotspots)**")
-                df_contrib = pd.DataFrame(contribuicao_matrix, index=nomes_intervencoes, columns=processos_ativos)
+            with c2:
+                st.markdown("**Contribuição por Processo**")
+                df_contrib = pd.DataFrame(contrib, index=nomes_int, columns=proc_ativos)
                 st.dataframe(df_contrib, use_container_width=True)
 
-                st.divider()
-                modo_grafico = st.selectbox(
-                    "📊 Escolha a escala de visualização do gráfico:",
-                    options=[
-                        "Valores Reais (Exatos)",
-                        "Valores Arredondados (Inteiros)",
-                        "Normalizado (0% a 100% por Intervenção)",
-                        "Escala Logarítmica (Base Log 10)"
-                    ]
-                )
+                modo = st.selectbox("📊 Escala do Gráfico:", [
+                    "Valores Reais (Exatos)",
+                    "Valores Arredondados (Inteiros)",
+                    "Normalizado (0% a 100%)",
+                    "Escala Logarítmica (Base Log 10)"
+                ])
 
-                df_dados_grafico = df_contrib.copy()
+                df_g = df_contrib.copy()
+                fmt, eixo_y, is_log, b_mode = '.2f', "Quantidade Real", False, "stack"
 
-                if modo_grafico == "Valores Arredondados (Inteiros)":
-                    df_dados_grafico = df_dados_grafico.round(0).astype(int)
-                    formato_texto = '%d'
-                    titulo_y = "Quantidade (Inteiros)"
-                    usar_log = False
-                    modo_barra = "stack"
+                if modo == "Valores Arredondados (Inteiros)":
+                    df_g = df_g.round(0).astype(int)
+                    fmt, eixo_y = '%d', "Quantidade (Inteiros)"
+                elif modo == "Normalizado (0% a 100%)":
+                    somas = df_g.sum(axis=1).replace(0, np.nan)
+                    df_g = df_g.div(somas, axis=0).fillna(0) * 100
+                    fmt, eixo_y = '.1f', "Contribuição (%)"
+                elif modo == "Escala Logarítmica (Base Log 10)":
+                    fmt, eixo_y, is_log, b_mode = '.2e', "Log 10", True, "group"
 
-                elif modo_grafico == "Normalizado (0% a 100% por Intervenção)":
-                    somas_linha = df_dados_grafico.sum(axis=1).replace(0, np.nan)
-                    df_dados_grafico = df_dados_grafico.div(somas_linha, axis=0).fillna(0) * 100
-                    formato_texto = '.1f'
-                    titulo_y = "Contribuição Relativa (%)"
-                    usar_log = False
-                    modo_barra = "stack"
-
-                elif modo_grafico == "Escala Logarítmica (Base Log 10)":
-                    formato_texto = '.2e'
-                    titulo_y = "Quantidade (Escala Log 10)"
-                    usar_log = True
-                    modo_barra = "group"
-
-                else:
-                    formato_texto = '.2f'
-                    titulo_y = "Quantidade Real"
-                    usar_log = False
-                    modo_barra = "stack"
-
-                df_plot = df_dados_grafico.reset_index().melt(
-                    id_vars="index", 
-                    var_name="Processo", 
-                    value_name="Valor"
-                )
+                df_plot = df_g.reset_index().melt(id_vars="index", var_name="Processo", value_name="Valor")
                 df_plot.rename(columns={"index": "Intervenção"}, inplace=True)
-
-                if usar_log:
+                if is_log:
                     df_plot = df_plot[df_plot["Valor"] > 0]
 
-                fig = px.bar(
-                    df_plot,
-                    x="Intervenção",
-                    y="Valor",
-                    color="Processo",
+                fig = px.bar(df_plot, x="Intervenção", y="Valor", color="Processo", barmode=b_mode, log_y=is_log, text_auto=fmt, labels={"Valor": eixo_y})
+                if modo == "Normalizado (0% a 100%)":
+                    fig.update_traces(texttemplate='%{y:.1f}%')
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.download_button("📥 Baixar CSV", df_contrib.to_csv().encode('utf-8'), "inventario_acv.csv", "text/csv")
+        except Exception as e:
+            st.error(f"Erro no cálculo: {e}")

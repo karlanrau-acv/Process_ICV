@@ -185,7 +185,6 @@ with tab4:
                 st.dataframe(df_contrib, use_container_width=True)
 
                 st.divider()
-                # Seletor de escala/transformação para o gráfico
                 modo_grafico = st.selectbox(
                     "📊 Escolha a escala de visualização do gráfico:",
                     options=[
@@ -196,7 +195,6 @@ with tab4:
                     ]
                 )
 
-                # Prepara os dados de acordo com a escolha do usuário
                 df_dados_grafico = df_contrib.copy()
 
                 if modo_grafico == "Valores Arredondados (Inteiros)":
@@ -215,13 +213,12 @@ with tab4:
                     modo_barra = "stack"
 
                 elif modo_grafico == "Escala Logarítmica (Base Log 10)":
-                    # Log10 exige barras agrupadas (group) e valores estritamente positivos
                     formato_texto = '.2e'
                     titulo_y = "Quantidade (Escala Log 10)"
                     usar_log = True
                     modo_barra = "group"
 
-                else: # Valores Reais (Exatos)
+                else:
                     formato_texto = '.2f'
                     titulo_y = "Quantidade Real"
                     usar_log = False
@@ -234,3 +231,11 @@ with tab4:
                 )
                 df_plot.rename(columns={"index": "Intervenção"}, inplace=True)
 
+                if usar_log:
+                    df_plot = df_plot[df_plot["Valor"] > 0]
+
+                fig = px.bar(
+                    df_plot,
+                    x="Intervenção",
+                    y="Valor",
+                    color="Processo",
